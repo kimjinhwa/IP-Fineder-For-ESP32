@@ -6,6 +6,38 @@ import time
 import json
 import uuid
 
+def normalize_mac(mac: str) -> str:
+    if not mac:
+        return ""
+    return mac.strip().upper().replace("-", ":")
+
+def mac_oui(mac: str) -> str:
+    mac = normalize_mac(mac)
+    parts = [p for p in mac.split(":") if p]
+    if len(parts) < 3:
+        return ""
+    return ":".join(parts[:3])
+
+OUI_NOTE_MAP = {
+    # Raspberry Pi Foundation / Trading
+    "B8:27:EB": "Raspberry Pi",
+    "DC:A6:32": "Raspberry Pi",
+    "E4:5F:01": "Raspberry Pi",
+    "28:CD:C1": "Raspberry Pi",
+    "88:A2:9E": "Raspberry Pi",
+
+    # Espressif (ESP32/ESP8266)
+    "24:6F:28": "ESP32",
+    "30:AE:A4": "ESP32",
+    "3C:71:BF": "ESP32",
+    "7C:DF:A1": "ESP32",
+    "7C:9E:BD": "ESP32",
+    "84:F3:EB": "ESP32",
+}
+
+def get_note_for_mac(mac: str) -> str:
+    return OUI_NOTE_MAP.get(mac_oui(mac), "")
+
 class IPFinder:
     UDP_PORT = 1234  # 클래스 상단에 정의
     
@@ -43,9 +75,10 @@ class IPFinder:
         list_frame.pack(pady=10, fill=tk.BOTH, expand=True)
 
         # 컬럼 헤더
-        self.tree = ttk.Treeview(list_frame, columns=('IP Address', 'MAC'), show='headings')
+        self.tree = ttk.Treeview(list_frame, columns=('IP Address', 'MAC','NOTE'), show='headings')
         self.tree.heading('IP Address', text='IP Address')
         self.tree.heading('MAC', text='MAC')
+        self.tree.heading('NOTE', text='NOTE')
         self.tree.pack(fill=tk.BOTH, expand=True, padx=10)
 
         # UDP 소켓 설정
@@ -86,10 +119,14 @@ class IPFinder:
                     ip = device["network"]["ip"]
                     mac = device["mac"]
                     version = response.get("ver", "unknown")
+                    hostname = response.get("hostname","")
+                    note = hostname
                     
                     if ip not in self.found_devices:
                         self.found_devices.add(ip)
-                        self.tree.insert('', 'end', values=(ip, mac))
+                        if(hostname==""):
+                            note = get_note_for_mac(mac)
+                        self.tree.insert('', 'end', values=(ip, mac, note))
                         
                         # 네트워크 정보가 있다면 저장
                         if device["network"].get("subnet"):
@@ -113,7 +150,9 @@ class IPFinder:
         selected_item = self.tree.selection()
         if selected_item:
             item = self.tree.item(selected_item[0])
-            ip, mac = item['values']
+            values = item.get('values') or []
+            ip = values[0] if len(values) > 0 else ""
+            mac = values[1] if len(values) > 1 else ""
             # 선택된 항목의 정보를 상단 텍스트박스에 표시
             self.entries['IPADDRESS'].delete(0, tk.END)
             self.entries['IPADDRESS'].insert(0, ip)
