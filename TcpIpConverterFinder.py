@@ -96,12 +96,15 @@ class IPFinder:
         self.tree.bind('<<TreeviewSelect>>', self.on_select)
 
         self.found_devices = set()
+        # 검색 응답으로 받은 장비별 네트워크 정보 (행 선택 시 표시용, 키는 정규화 MAC)
+        self.device_info_by_mac = {}
 
     def search_devices(self):
         # 리스트박스 클리어
         for item in self.tree.get_children():
             self.tree.delete(item)
         self.found_devices.clear()
+        self.device_info_by_mac.clear()
 
         # JSON 형식의 검색 메시지 생성 및 전송
         discovery_message = create_discovery_message()
@@ -112,6 +115,7 @@ class IPFinder:
             try:
                 data, addr = self.sock.recvfrom(1024)
                 response = json.loads(data.decode())
+                #print(response)
                 
                 # JSON 응답 처리
                 if response["cmd"] == "DEVICE_RESPONSE":
@@ -121,7 +125,13 @@ class IPFinder:
                     version = response.get("ver", "unknown")
                     hostname = response.get("hostname","")
                     note = hostname
-                    
+                    net = device.get("network") or {}
+                    self.device_info_by_mac[normalize_mac(mac)] = {
+                        "subnet": net.get("subnet", ""),
+                        "gateway": net.get("gateway", ""),
+                        "version": version,
+                    }
+
                     if ip not in self.found_devices:
                         self.found_devices.add(ip)
                         if(hostname==""):
@@ -158,6 +168,19 @@ class IPFinder:
             self.entries['IPADDRESS'].insert(0, ip)
             self.entries['MAC ADDR'].delete(0, tk.END)
             self.entries['MAC ADDR'].insert(0, mac)
+
+            info = self.device_info_by_mac.get(normalize_mac(mac))
+            if info:
+                if info.get("subnet"):
+                    self.entries['SUBNET'].delete(0, tk.END)
+                    self.entries['SUBNET'].insert(0, info["subnet"])
+                if info.get("gateway"):
+                    self.entries['GATEWAY'].delete(0, tk.END)
+                    self.entries['GATEWAY'].insert(0, info["gateway"])
+                self.entries['VERSION'].configure(state='normal')
+                self.entries['VERSION'].delete(0, tk.END)
+                self.entries['VERSION'].insert(0, info.get("version", "unknown"))
+                self.entries['VERSION'].configure(state='readonly')
 
     def setup_address(self):
         # 설정 버튼 클릭 시 처리
