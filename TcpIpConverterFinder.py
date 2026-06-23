@@ -5,6 +5,8 @@ import threading
 import time
 import json
 import uuid
+import sys
+import os
 
 def normalize_mac(mac: str) -> str:
     if not mac:
@@ -34,6 +36,14 @@ OUI_NOTE_MAP = {
     "7C:9E:BD": "ESP32",
     "84:F3:EB": "ESP32",
 }
+def resource_path(relative_path):
+    """ 실행 파일 내부의 임시 경로를 반환하는 함수 """
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
 
 def get_note_for_mac(mac: str) -> str:
     return OUI_NOTE_MAP.get(mac_oui(mac), "")
@@ -43,6 +53,19 @@ class IPFinder:
     
     def __init__(self):
         self.root = tk.Tk()
+        icon_path = resource_path("iftech_logo.ico")
+        try:
+            self.root.iconbitmap(icon_path)
+        except Exception as e:
+            # 아이콘 로드 실패 시 에러 없이 실행되도록 예외 처리
+            pass
+        try:
+            img = tk.PhotoImage(file=icon_path)
+            self.root.iconphoto(False, img)
+        except Exception as e:
+            print(f"Icon Error: {e}")
+
+
         self.root.title("IP Finder")
         self.root.geometry("600x400")
 
