@@ -67,20 +67,20 @@ class IPFinder:
 
 
         self.root.title("IP Finder")
-        self.root.geometry("600x400")
+        self.root.geometry("600x430")
 
         # 상단 프레임
         top_frame = tk.Frame(self.root)
         top_frame.pack(pady=10)
 
-        # IP 정보 입력 필드들 - VERSION 위치 변경
-        labels = ['IPADDRESS', 'GATEWAY', 'SUBNET', 'MAC ADDR', 'VERSION']  # VERSION을 마지막으로 이동
+        # IP 정보 입력 필드들 - VERSION은 읽기 전용, WEB PORT는 설정용 입력
+        labels = ['IPADDRESS', 'GATEWAY', 'SUBNET', 'MAC ADDR', 'WEB PORT', 'VERSION']
         self.entries = {}
         
         for i, label in enumerate(labels):
             tk.Label(top_frame, text=f"{label} :").grid(row=i, column=0, padx=5, pady=2, sticky='e')
             entry = tk.Entry(top_frame, width=30)
-            if label == 'VERSION':  # VERSION 필드는 읽기 전용으로 설정
+            if label == 'VERSION':
                 entry.configure(state='readonly')
             entry.grid(row=i, column=1, padx=5, pady=2)
             self.entries[label] = entry
@@ -149,10 +149,16 @@ class IPFinder:
                     hostname = response.get("hostname","")
                     note = hostname
                     net = device.get("network") or {}
+                    webserverport = net.get("webserverport")
+                    if webserverport is not None:
+                        webserverport = str(webserverport)
+                    else:
+                        webserverport = ""
                     self.device_info_by_mac[normalize_mac(mac)] = {
                         "subnet": net.get("subnet", ""),
                         "gateway": net.get("gateway", ""),
                         "version": version,
+                        "webserverport": webserverport,
                     }
 
                     if ip not in self.found_devices:
@@ -204,6 +210,8 @@ class IPFinder:
                 self.entries['VERSION'].delete(0, tk.END)
                 self.entries['VERSION'].insert(0, info.get("version", "unknown"))
                 self.entries['VERSION'].configure(state='readonly')
+                self.entries['WEB PORT'].delete(0, tk.END)
+                self.entries['WEB PORT'].insert(0, info.get("webserverport", ""))
 
     def setup_address(self):
         # 설정 버튼 클릭 시 처리
@@ -211,9 +219,10 @@ class IPFinder:
         ip = self.entries['IPADDRESS'].get()
         subnet = self.entries['SUBNET'].get()
         gateway = self.entries['GATEWAY'].get()
+        webserverport = self.entries['WEB PORT'].get()
         
         # JSON 형식의 설정 메시지 생성 및 전송
-        config_message = create_config_message(mac, ip, subnet, gateway)
+        config_message = create_config_message(mac, ip, subnet, gateway, webserverport)
         self.sock.sendto(config_message.encode(), ('255.255.255.255', self.UDP_PORT))
 
     def run(self):
@@ -231,7 +240,12 @@ def create_discovery_message():
         "timestamp": int(time.time())
     })
 
-def create_config_message(mac, ip, subnet, gateway):
+def create_config_message(mac, ip, subnet, gateway, webserverport=""):
+    try:
+        port = int(webserverport) if webserverport != "" else ""
+    except ValueError:
+        port = webserverport
+
     return json.dumps({
         "cmd": "SET_NETWORK_CONFIG",
         "ver": "1.0",
@@ -242,7 +256,8 @@ def create_config_message(mac, ip, subnet, gateway):
             "network": {
                 "ip": ip,
                 "subnet": subnet,
-                "gateway": gateway
+                "gateway": gateway,
+                "webserverport": port,
             }
         }
     })
